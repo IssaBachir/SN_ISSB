@@ -1,9 +1,11 @@
+import os
 import torch
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
 from DiamondModel import DiamondModel
 from standardisation import standardisation, to_tensor
 
@@ -11,48 +13,59 @@ def safe_label_encode(train_col, test_col):
     le = LabelEncoder()
     le.fit(train_col)
     known_labels = set(le.classes_)
-    # Remplacer les valeurs inconnues dans test_col par la première classe connue
     test_col_safe = [x if x in known_labels else le.classes_[0] for x in test_col]
     return le.transform(train_col), le.transform(test_col_safe)
 
 class Trainner:
     def __init__(self):
-        # Chargement des données (tableaux numpy)
+        # ✅ Si les fichiers .npy n'existent pas, générer depuis CSV
+        if not os.path.exists("data/x_train.npy"):
+            print("⚠️ Fichiers .npy introuvables. Génération depuis dataset.csv...")
+            df = pd.read_csv("data/diamonds.csv")  # ⚠️ Assure-toi que ce fichier est présent dans ton repo
+
+            X = df.drop("target", axis=1).values
+            y = df["target"].values
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+
+            np.save("data/x_train.npy", X_train)
+            np.save("data/x_test.npy", X_test)
+            np.save("data/y_train.npy", y_train)
+            np.save("data/y_test.npy", y_test)
+            print("✅ Fichiers .npy générés.")
+
+        # 🔁 Chargement des .npy
         self.X_train = np.load("data/x_train.npy", allow_pickle=True)
         self.y_train = np.load("data/y_train.npy", allow_pickle=True)
         self.X_test = np.load("data/x_test.npy", allow_pickle=True)
         self.y_test = np.load("data/y_test.npy", allow_pickle=True)
 
-        # Encodage des labels y
+        # Encodage des labels
         self.le_y = LabelEncoder()
         self.y_train = self.le_y.fit_transform(self.y_train)
-        # Gestion labels inconnus dans y_test
         known_labels = set(self.le_y.classes_)
         self.y_test = np.array([y if y in known_labels else self.le_y.classes_[0] for y in self.y_test])
         self.y_test = self.le_y.transform(self.y_test)
 
-        # Convertir en DataFrame pandas pour gérer les colonnes catégorielles
+        # Encodage des colonnes catégorielles
         self.X_train = pd.DataFrame(self.X_train)
         self.X_test = pd.DataFrame(self.X_test)
 
-        # Identifier les colonnes catégorielles (type object)
         cat_cols = self.X_train.select_dtypes(include=['object']).columns
-
-        # Encoder les colonnes catégorielles avec gestion des labels inconnus
         for col in cat_cols:
             train_encoded, test_encoded = safe_label_encode(self.X_train[col], self.X_test[col])
             self.X_train[col] = train_encoded
             self.X_test[col] = test_encoded
 
-        # Convertir en numpy array après encodage
+        # Conversion et standardisation
         X_train_num = self.X_train.values.astype(float)
         X_test_num = self.X_test.values.astype(float)
 
-        # Standardisation
         self.X_train_t = to_tensor(standardisation(X_train_num))
         self.X_test_t = to_tensor(standardisation(X_test_num))
 
-        # Convertir y en tenseurs longs pour CrossEntropyLoss
         self.y_train_t = to_tensor(self.y_train).long()
         self.y_test_t = to_tensor(self.y_test).long()
 
@@ -112,7 +125,7 @@ class Trainner:
 
 if __name__ == "__main__":
     trainner = Trainner()
-    model = DiamondModel(trainner.X_train_t.shape[1])  # nombre de features en entrée
+    model = DiamondModel(trainner.X_train_t.shape[1])
     model = trainner.train(model)
     trainner.save_model(model, f"./models/model_final.pth")
-    print("Model saved")
+    print("✅ Modèle sauvegardé avec succès")
