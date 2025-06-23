@@ -118,13 +118,22 @@ class Trainner:
         with torch.inference_mode():
             final_logits = model(self.X_test_t)
             final_preds = torch.argmax(final_logits, dim=1).cpu().numpy()
-            f1 = f1_score(self.y_test, final_preds, average="weighted")
 
-            print(f"\n✅ F1-score final (test set) : {f1:.4f}")
+            try:
+                f1 = f1_score(self.y_test, final_preds, average="weighted")
+                print(f"\n✅ F1-score final (test set) : {f1:.4f}")
 
-            # Sauvegarde dans metrics.json
-            with open("metrics.json", "w") as f:
-                json.dump({"f1": round(f1, 4)}, f)
+                # Sauvegarde dans metrics.json seulement si F1 est raisonnable
+                if f1 >= 0.1:
+                    with open("metrics.json", "w") as f:
+                        json.dump({"f1": round(f1, 4)}, f)
+                    print("✅ metrics.json généré avec succès")
+                else:
+                    print("⚠️ F1-score trop bas. metrics.json non généré.")
+
+            except Exception as e:
+                print(f"❌ Erreur lors du calcul du F1-score : {e}")
+                print("❌ metrics.json non généré.")
 
         return model
 
