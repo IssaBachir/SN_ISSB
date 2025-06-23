@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import numpy as np
 import torch.nn as nn
@@ -6,6 +7,7 @@ import torch.optim as optim
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
 from DiamondModel import DiamondModel
 from standardisation import standardisation, to_tensor
 
@@ -22,8 +24,6 @@ class Trainner:
         if not os.path.exists("data/x_train.npy"):
             print("⚠️ Fichiers .npy introuvables. Génération depuis diamonds.csv...")
             df = pd.read_csv("data/diamonds.csv")
-
-            # Utiliser la colonne 'cut' comme cible
             X = df.drop("cut", axis=1).values
             y = df["cut"].values
 
@@ -37,20 +37,17 @@ class Trainner:
             np.save("data/y_test.npy", y_test)
             print("✅ Fichiers .npy générés.")
 
-        # Charger les données
         self.X_train = np.load("data/x_train.npy", allow_pickle=True)
         self.y_train = np.load("data/y_train.npy", allow_pickle=True)
         self.X_test = np.load("data/x_test.npy", allow_pickle=True)
         self.y_test = np.load("data/y_test.npy", allow_pickle=True)
 
-        # Encoder les labels
         self.le_y = LabelEncoder()
         self.y_train = self.le_y.fit_transform(self.y_train)
         known_labels = set(self.le_y.classes_)
         self.y_test = np.array([y if y in known_labels else self.le_y.classes_[0] for y in self.y_test])
         self.y_test = self.le_y.transform(self.y_test)
 
-        # Convertir en DataFrame pour gérer les colonnes catégorielles
         self.X_train = pd.DataFrame(self.X_train)
         self.X_test = pd.DataFrame(self.X_test)
 
@@ -63,7 +60,6 @@ class Trainner:
         X_train_num = self.X_train.values.astype(float)
         X_test_num = self.X_test.values.astype(float)
 
-        # Standardisation et conversion en tenseurs
         self.X_train_t = to_tensor(standardisation(X_train_num))
         self.X_test_t = to_tensor(standardisation(X_test_num))
 
@@ -116,11 +112,25 @@ class Trainner:
                 print(
                     f"Epoch:{epoch}, | Loss:{loss:.5f} | Acc={acc:.2f}% | Test Loss:{test_loss:.5f} | Test Acc:{test_acc:.2f}%"
                 )
- 
+
+        # Calcul F1-score sur les prédictions finales
+        model.eval()
+        with torch.inference_mode():
+            final_logits = model(self.X_test_t)
+            final_preds = torch.argmax(final_logits, dim=1).cpu().numpy()
+            f1 = f1_score(self.y_test, final_preds, average="weighted")
+
+            print(f"\n✅ F1-score final (test set) : {f1:.4f}")
+
+            # Sauvegarde dans metrics.json
+            with open("metrics.json", "w") as f:
+                json.dump({"f1": round(f1, 4)}, f)
+
         return model
 
     @staticmethod
     def save_model(model, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save(model.state_dict(), path)
 
 
@@ -128,5 +138,5 @@ if __name__ == "__main__":
     trainner = Trainner()
     model = DiamondModel(trainner.X_train_t.shape[1])
     model = trainner.train(model)
-    trainner.save_model(model, f"./models/model_final.pth")
+    trainner.save_model(model, "./models/model_final.pth")
     print("✅ Modèle sauvegardé avec succès")
