@@ -18,13 +18,14 @@ def safe_label_encode(train_col, test_col):
 
 class Trainner:
     def __init__(self):
-        # ✅ Si les fichiers .npy n'existent pas, générer depuis CSV
+        # Générer les fichiers .npy s'ils n'existent pas
         if not os.path.exists("data/x_train.npy"):
-            print("⚠️ Fichiers .npy introuvables. Génération depuis dataset.csv...")
-            df = pd.read_csv("data/diamonds.csv")  # ⚠️ Assure-toi que ce fichier est présent dans ton repo
+            print("⚠️ Fichiers .npy introuvables. Génération depuis diamonds.csv...")
+            df = pd.read_csv("data/diamonds.csv")
 
-            X = df.drop("target", axis=1).values
-            y = df["target"].values
+            # Utiliser la colonne 'cut' comme cible
+            X = df.drop("cut", axis=1).values
+            y = df["cut"].values
 
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42
@@ -36,20 +37,20 @@ class Trainner:
             np.save("data/y_test.npy", y_test)
             print("✅ Fichiers .npy générés.")
 
-        # 🔁 Chargement des .npy
+        # Charger les données
         self.X_train = np.load("data/x_train.npy", allow_pickle=True)
         self.y_train = np.load("data/y_train.npy", allow_pickle=True)
         self.X_test = np.load("data/x_test.npy", allow_pickle=True)
         self.y_test = np.load("data/y_test.npy", allow_pickle=True)
 
-        # Encodage des labels
+        # Encoder les labels
         self.le_y = LabelEncoder()
         self.y_train = self.le_y.fit_transform(self.y_train)
         known_labels = set(self.le_y.classes_)
         self.y_test = np.array([y if y in known_labels else self.le_y.classes_[0] for y in self.y_test])
         self.y_test = self.le_y.transform(self.y_test)
 
-        # Encodage des colonnes catégorielles
+        # Convertir en DataFrame pour gérer les colonnes catégorielles
         self.X_train = pd.DataFrame(self.X_train)
         self.X_test = pd.DataFrame(self.X_test)
 
@@ -59,10 +60,10 @@ class Trainner:
             self.X_train[col] = train_encoded
             self.X_test[col] = test_encoded
 
-        # Conversion et standardisation
         X_train_num = self.X_train.values.astype(float)
         X_test_num = self.X_test.values.astype(float)
 
+        # Standardisation et conversion en tenseurs
         self.X_train_t = to_tensor(standardisation(X_train_num))
         self.X_test_t = to_tensor(standardisation(X_test_num))
 
@@ -115,7 +116,7 @@ class Trainner:
                 print(
                     f"Epoch:{epoch}, | Loss:{loss:.5f} | Acc={acc:.2f}% | Test Loss:{test_loss:.5f} | Test Acc:{test_acc:.2f}%"
                 )
-
+ 
         return model
 
     @staticmethod
